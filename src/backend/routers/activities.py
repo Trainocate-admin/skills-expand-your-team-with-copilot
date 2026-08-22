@@ -16,6 +16,7 @@ router = APIRouter(
 @router.get("", response_model=Dict[str, Any])
 @router.get("/", response_model=Dict[str, Any])
 def get_activities(
+    difficulty: Optional[str] = None,
     day: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None
@@ -23,12 +24,24 @@ def get_activities(
     """
     Get all activities with their details, with optional filtering by day and time
     
+    - difficulty: Filter by difficulty ('beginner', 'intermediate', 'advanced', or 'all' for activities without a specified difficulty)
     - day: Filter activities occurring on this day (e.g., 'Monday', 'Tuesday')
     - start_time: Filter activities starting at or after this time (24-hour format, e.g., '14:30')
     - end_time: Filter activities ending at or before this time (24-hour format, e.g., '17:00')
     """
     # Build the query based on provided filters
     query = {}
+
+    if difficulty:
+        normalized_difficulty = difficulty.lower()
+        if normalized_difficulty == "all":
+            query["$or"] = [
+                {"difficulty": {"$exists": False}},
+                {"difficulty": None},
+                {"difficulty": ""}
+            ]
+        else:
+            query["difficulty"] = normalized_difficulty
     
     if day:
         query["schedule_details.days"] = {"$in": [day]}
