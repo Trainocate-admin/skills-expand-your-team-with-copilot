@@ -304,6 +304,96 @@ document.addEventListener("DOMContentLoaded", () => {
     return details.schedule;
   }
 
+  // Build sharing data for each activity
+  function buildShareData(activityName, details) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.searchParams.set("activity", activityName);
+    shareUrl.hash = "";
+
+    const scheduleSummary = formatSchedule(details);
+    const shareText = `Check out ${activityName} at Mergington High School: ${scheduleSummary}`;
+    const encodedUrl = encodeURIComponent(shareUrl.toString());
+    const encodedText = encodeURIComponent(shareText);
+
+    return {
+      shareUrl: shareUrl.toString(),
+      shareText,
+      whatsappUrl: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+      facebookUrl: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      xUrl: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+    };
+  }
+
+  // Copy text to clipboard with fallback
+  async function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "absolute";
+    helper.style.left = "-9999px";
+    document.body.appendChild(helper);
+    helper.select();
+    document.execCommand("copy");
+    document.body.removeChild(helper);
+  }
+
+  // Handle native share action
+  async function handleNativeShare(event) {
+    const button = event.currentTarget;
+    const shareUrl = decodeURIComponent(button.dataset.shareUrl || "");
+    const shareText = decodeURIComponent(button.dataset.shareText || "");
+
+    if (!shareUrl) {
+      showMessage("Could not create share link.", "error");
+      return;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Mergington High School Activity",
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await copyToClipboard(shareUrl);
+      showMessage("Activity link copied. Share it with your friends!", "success");
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("Error sharing activity:", error);
+      showMessage("Could not share this activity right now.", "error");
+    }
+  }
+
+  // Handle copy link action
+  async function handleCopyShareLink(event) {
+    const button = event.currentTarget;
+    const shareUrl = decodeURIComponent(button.dataset.shareUrl || "");
+
+    if (!shareUrl) {
+      showMessage("Could not create share link.", "error");
+      return;
+    }
+
+    try {
+      await copyToClipboard(shareUrl);
+      showMessage("Activity link copied. Share it with your friends!", "success");
+    } catch (error) {
+      console.error("Error copying share link:", error);
+      showMessage("Could not copy the activity link.", "error");
+    }
+  }
+
   // Function to determine activity type (this would ideally come from backend)
   function getActivityType(activityName, description) {
     const name = activityName.toLowerCase();
@@ -498,6 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Format the schedule using the new helper function
     const formattedSchedule = formatSchedule(details);
+    const shareData = buildShareData(name, details);
 
     // Create activity tag
     const tagHtml = `
@@ -528,6 +619,50 @@ document.addEventListener("DOMContentLoaded", () => {
         <span class="tooltip-text">Regular meetings at this time throughout the semester</span>
       </p>
       ${capacityIndicator}
+      <div class="share-container">
+        <p class="share-label">Share with friends:</p>
+        <div class="share-actions">
+          <button
+            type="button"
+            class="share-button native-share-button"
+            data-share-url="${encodeURIComponent(shareData.shareUrl)}"
+            data-share-text="${encodeURIComponent(shareData.shareText)}"
+          >
+            Share
+          </button>
+          <button
+            type="button"
+            class="share-button copy-share-button"
+            data-share-url="${encodeURIComponent(shareData.shareUrl)}"
+          >
+            Copy Link
+          </button>
+          <a
+            class="share-button social-share-link"
+            href="${shareData.whatsappUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            WhatsApp
+          </a>
+          <a
+            class="share-button social-share-link"
+            href="${shareData.facebookUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Facebook
+          </a>
+          <a
+            class="share-button social-share-link"
+            href="${shareData.xUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            X
+          </a>
+        </div>
+      </div>
       <div class="participants-list">
         <h5>Current Participants:</h5>
         <ul>
@@ -576,6 +711,16 @@ document.addEventListener("DOMContentLoaded", () => {
     deleteButtons.forEach((button) => {
       button.addEventListener("click", handleUnregister);
     });
+
+    const nativeShareButton = activityCard.querySelector(".native-share-button");
+    if (nativeShareButton) {
+      nativeShareButton.addEventListener("click", handleNativeShare);
+    }
+
+    const copyShareButton = activityCard.querySelector(".copy-share-button");
+    if (copyShareButton) {
+      copyShareButton.addEventListener("click", handleCopyShareLink);
+    }
 
     // Add click handler for register button (only when authenticated)
     if (currentUser) {
@@ -860,6 +1005,15 @@ document.addEventListener("DOMContentLoaded", () => {
     setDayFilter,
     setTimeRangeFilter,
   };
+
+  // Initialize activity search from URL parameter if present
+  const activityFromUrl = new URLSearchParams(window.location.search).get(
+    "activity"
+  );
+  if (activityFromUrl) {
+    searchQuery = activityFromUrl;
+    searchInput.value = activityFromUrl;
+  }
 
   // Initialize app
   checkAuthentication();
